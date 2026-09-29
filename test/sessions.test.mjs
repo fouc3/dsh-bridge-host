@@ -10,6 +10,9 @@
  * invocation fail, which is exactly the bug these tests exist to prevent.
  */
 import { test } from 'node:test'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import {
   ensureSessionArgv,
@@ -204,4 +207,61 @@ test('the timestamp is taken from the local record when ACP omits it', () => {
   const [merged] = mergeSessionListings(acp, local)
   // Without this, ordering by recency silently degrades to nothing.
   assert.equal(merged.lastUsedAt, '2026-05-05')
+})
+
+// --- working-directory validation ---
+
+import { createDispatch } from '../bridge/src/dispatch.mjs'
+import { loadConfig } from '../bridge/src/config.mjs'
+import { Ledger } from '../bridge/src/ledger.mjs'
+
+/** A dispatcher that never actually runs an agent (all cases reject first). */
+function validator() {
+  const config = loadConfig({ ...process.env, DSH_BRIDGE_TOKEN: 'validation-token-0123456789' })
+  return createDispatch(config, { ledger: null, log: () => {} })
+}
+
+test('a non-existent directory is rejected by name, not by a spawn error', async () => {
+  const d = validator()
+  // Without this check acpx fails with "Failed to spawn agent command", which
+  // reads like a broken install and sends callers chasing PATH.
+  await assert.rejects(
+    () => d.sessionsList({ cwd: '/no/such/directory/xyz' }),
+    (error) => error.code === 'bad-cwd' && error.message.includes('/no/such/directory/xyz'),
+  )
+})
+
+test('a relative directory is rejected as a request error', async () => {
+  const d = validator()
+  await assert.rejects(
+    () => d.sessionsList({ cwd: 'TMP' }),
+    (error) => error.code === 'bad-request' && error.message.includes('absolute'),
+  )
+})
+
+test('a file is not accepted as a working directory', async () => {
+  const d = validator()
+  await assert.rejects(
+    () => d.sessionsList({ cwd: '/etc/hostname' }),
+    (error) => error.code === 'bad-cwd' && error.message.includes('not a directory'),
+  )
+})
+
+test('the same validation guards dispatch and prompt', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-cwd-guard-'))
+  const ledger = await new Ledger({ path: join(dir, 'tasks.json') }).load()
+  const config = loadConfig({ ...process.env, DSH_BRIDGE_TOKEN: 'validation-token-0123456789' })
+  const d = createDispatch(config, { ledger, log: () => {} })
+  try {
+    // A caller passing a bad directory must be told before any work is queued.
+    await assert.rejects(() => d.prompt({ cwd: 'nope', text: 'hi' }), /absolute|does not exist/)
+    await assert.rejects(
+      () => d.dispatch({ cwd: '/no/such/dir', text: 'hi', streamId: 's' }),
+      (error) => error.code === 'bad-cwd',
+    )
+    // Nothing may have been recorded, since neither call should have queued.
+    assert.equal(ledger.tasks.size, 0)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

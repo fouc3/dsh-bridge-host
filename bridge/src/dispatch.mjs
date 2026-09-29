@@ -5,6 +5,8 @@
  * returns plain JSON; failures carry a stable `code` so the plugin can react
  * without string-matching messages.
  */
+import { statSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
 import {
   BridgeError,
   cancelArgv,
@@ -24,11 +26,31 @@ import { TaskStatus } from './ledger.mjs'
 import { buildCallbackPayload, deliverCallback } from './callback.mjs'
 import { classifyOutcome } from './outcome.mjs'
 
-/** Reject anything that is not an absolute directory path. */
+/**
+ * Validate a working directory.
+ *
+ * acpx reports a missing directory as "Failed to spawn agent command ... a
+ * working directory ... was not found", which reads like a broken install and
+ * sends callers chasing PATH. Checking here turns that into an unambiguous
+ * error naming the directory, since a caller passing a relative or misspelled
+ * path is the common case.
+ */
 function requireCwd(value, fallback) {
   const cwd = value ?? fallback
   if (typeof cwd !== 'string' || cwd === '') {
     throw new BridgeError('bad-request', 'cwd must be a non-empty absolute path')
+  }
+  if (!isAbsolute(cwd)) {
+    throw new BridgeError('bad-request', `cwd must be an absolute path, got ${JSON.stringify(cwd)}`)
+  }
+  let stat
+  try {
+    stat = statSync(cwd)
+  } catch {
+    throw new BridgeError('bad-cwd', `working directory does not exist: ${cwd}`)
+  }
+  if (!stat.isDirectory()) {
+    throw new BridgeError('bad-cwd', `not a directory: ${cwd}`)
   }
   return cwd
 }
