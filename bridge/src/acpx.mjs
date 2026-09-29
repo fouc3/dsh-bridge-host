@@ -312,6 +312,9 @@ export function groupByWorkspace(sessions, { maxSessionsPerWorkspace = 20 } = {}
       sessions: sorted.slice(0, maxSessionsPerWorkspace).map((s) => ({
         sessionId: s.sessionId,
         name: s.name ?? null,
+        // What the conversation was about; null when the agent never recorded
+        // a title for it.
+        title: s.title ?? null,
         closed: Boolean(s.closed),
         lastUsedAt: s.lastUsedAt ?? null,
       })),

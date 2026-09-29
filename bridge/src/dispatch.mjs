@@ -23,6 +23,7 @@ import {
   runAcpx,
 } from './acpx.mjs'
 import { TaskStatus } from './ledger.mjs'
+import { attachTitles, defaultSessionRoot } from './titles.mjs'
 import { buildCallbackPayload, deliverCallback } from './callback.mjs'
 import { classifyOutcome } from './outcome.mjs'
 
@@ -256,6 +257,17 @@ export function createDispatch(config, deps = {}) {
 
       const onlyNamed = args.namedOnly === true
       const filtered = onlyNamed ? merged.filter((s) => s.name) : merged
+
+      // Attach titles so a listing can say what each conversation was about.
+      // Without them the only identifier is an opaque id, which is no help to
+      // a caller trying to recognise "the session where we did X".
+      if (args.withTitles !== false) {
+        await attachTitles(filtered, {
+          sessionRoot: args.sessionRoot || defaultSessionRoot(),
+          maxTitles: Number.isInteger(args.maxTitles) ? args.maxTitles : 40,
+        })
+      }
+
       const workspaces = groupByWorkspace(filtered, {
         maxSessionsPerWorkspace: Number.isInteger(args.maxPerWorkspace) ? args.maxPerWorkspace : 20,
       })
