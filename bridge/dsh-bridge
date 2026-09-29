@@ -1,0 +1,3 @@
+#!/bin/sh
+# Convenience launcher so `./dsh-bridge` works without remembering node flags.
+exec node "$(dirname "$0")/dsh-bridge.mjs" "$@"

@@ -1,0 +1,32 @@
+[Unit]
+Description=DSH bridge for MaiBot (token-gated ACP relay to DeepSeek Harness)
+Documentation=file:%h/Projects/dsh-bridge-host/README.md
+# The bridge spawns `dsh --profile acp`; it does not depend on dsh-web.service
+# and must not be wired to it, so a Harness Web restart leaves this running.
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/dsh-bridge-host/bridge
+
+# The shared token lives in an environment file that is NOT in version control.
+# Create it with:  install -m 600 /dev/null ~/.config/dsh-bridge.env
+# then write:      DSH_BRIDGE_TOKEN=<openssl rand -hex 32>
+EnvironmentFile=%h/.config/dsh-bridge.env
+
+Environment=DSH_BRIDGE_HOST=172.24.0.1
+Environment=DSH_BRIDGE_PORT=13081
+Environment=DSH_BRIDGE_MAX_CONCURRENCY=4
+Environment=DSH_BRIDGE_TIMEOUT_MS=600000
+
+ExecStart=/usr/bin/node %h/Projects/dsh-bridge-host/bridge/dsh-bridge.mjs
+
+Restart=on-failure
+RestartSec=3
+
+# Modest hardening. The bridge needs no privileges and only writes nothing,
+# but it must reach the network to bind the bridge address and spawn children.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

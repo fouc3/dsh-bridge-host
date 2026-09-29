@@ -1,0 +1,15 @@
+# acpx runtime dependency (pre-1.0; pinned by package.json and locked by tests)
+bridge/node_modules/
+
+# The shared token must never be committed. It normally lives in
+# ~/.config/dsh-bridge.env, outside this repository.
+*.env
+.env
+dsh-bridge.env
+
+# Operator state (task ledger); created at runtime, safe to delete.
+tasks.json
+
+# Editor / OS noise
+*.swp
+.DS_Store
